@@ -66,7 +66,8 @@ namespace Stef.DatabaseQuery.Business.Managers.Databases
                 _TableColumnDic = _ColumnDic
                     .Values
                     .SelectMany(c => c)
-                    .ToDictionary(c => string.Concat(c.TableName.ToLower(), ";", c.ColumnName.ToLower()));
+                    .GroupBy(c => string.Concat(c.TableName.ToLower(), ";", c.ColumnName.ToLower()))
+                    .ToDictionary(c => c.Key, c => c.FirstOrDefault());
 
                 provider
                     .GetRelations(connection)

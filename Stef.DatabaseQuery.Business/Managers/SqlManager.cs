@@ -93,6 +93,14 @@ namespace Stef.DatabaseQuery.Business.Managers
                         var rowCount = 0;
                         var fieldCount = reader.FieldCount;
 
+                        if (fieldCount != sqlSelectToken.Columns.Count)
+                        {
+                            sqlSelectToken.Columns.Clear();
+                            var dataTable = reader.GetSchemaTable();
+
+                            UpdateSqlSelectTokenColumns(sqlSelectToken, dataTable);
+                        }
+
                         while (reader.Read())
                         {
                             rowCount++;
@@ -108,7 +116,7 @@ namespace Stef.DatabaseQuery.Business.Managers
 
                             for (var i = 0; i < fieldCount; i++)
                             {
-                                var column = sqlSelectToken.ColumnList[i];
+                                var column = sqlSelectToken.Columns[i];
                                 var value = databaseInfo.Provider.ConvertFromStorageType(reader.GetValue(i), column.Type);
 
                                 if (value == null)
@@ -133,6 +141,30 @@ namespace Stef.DatabaseQuery.Business.Managers
 
                 return result;
             }
+        }
+        private void UpdateSqlSelectTokenColumns(SqlSelectToken sqlSelectToken, DataTable dataTable)
+        {
+            var index = 0;
+            foreach (DataRow dataRow in dataTable.Rows)
+            {
+                var columnName = (string)dataRow["ColumnName"];
+                var column = sqlSelectToken.GetColumnInfo(null, columnName);
+
+                sqlSelectToken.Columns.Add(
+                    new SqlColumnToken(
+                        columnName,
+                        null,
+                        null,
+                        string.Concat("f", index),
+                        (Type)dataRow["DataType"],
+                        column?.RelatedTableName,
+                        column?.RelatedColumnName,
+                        true));
+
+                index++;
+            }
+
+            sqlSelectToken.RefreshCanUpdate();
         }
 
         public int ExecuteNonQuery(DatabaseInfo databaseInfo, IDbConnection connection, IDbTransaction transaction, string nonQuery, JObject parameterData = null, List<SqlColumnToken> parameterColumns = null)
@@ -194,11 +226,11 @@ namespace Stef.DatabaseQuery.Business.Managers
             var parameterBuilder = new StringBuilder();
 
             var index = 0;
-            foreach (var column in sqlSelectToken.ColumnList.Union(sqlSelectToken.ColumnSaveList))
+            foreach (var column in sqlSelectToken.Columns.Union(sqlSelectToken.ColumnSaveItems))
             {
                 var parameterValue = data[column.InternalFieldName].ToObject();
 
-                if ((parameterValue == null || parameterValue == DBNull.Value) && sqlSelectToken.ColumnList.Contains(column))
+                if ((parameterValue == null || parameterValue == DBNull.Value) && sqlSelectToken.Columns.Contains(column))
                     continue;
 
                 if (index > 0)
@@ -244,7 +276,7 @@ namespace Stef.DatabaseQuery.Business.Managers
             var setIndex = 0;
             var whereIndex = 0;
 
-            foreach (var column in sqlSelectToken.ColumnSaveList)
+            foreach (var column in sqlSelectToken.ColumnSaveItems)
             {
                 if (data["_changed"][column.InternalFieldName]?.Type != JTokenType.Boolean)
                     continue;
@@ -275,7 +307,7 @@ namespace Stef.DatabaseQuery.Business.Managers
             if (parameterIndex == 0)
                 return 0;
 
-            foreach (var column in sqlSelectToken.ColumnKeyList)
+            foreach (var column in sqlSelectToken.ColumnKeys)
             {
                 if (whereIndex > 0)
                     whereBuilder.Append(" AND ");
@@ -319,7 +351,7 @@ namespace Stef.DatabaseQuery.Business.Managers
             var parameterIndex = 0;
             var whereIndex = 0;
 
-            foreach (var column in sqlSelectToken.ColumnKeyList)
+            foreach (var column in sqlSelectToken.ColumnKeys)
             {
                 if (whereIndex > 0)
                     whereBuilder.Append(" AND ");

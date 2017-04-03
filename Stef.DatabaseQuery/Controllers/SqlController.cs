@@ -96,12 +96,12 @@ namespace Stef.DatabaseQuery.Controllers
                                     databaseId = tableData.DatabaseId,
                                     rows = tableData.Rows,
                                     script = tableData.Script,
-                                    columns = sqlSelectToken.ColumnList,
-                                    tables = string.Join(", ", sqlSelectToken.TableList.Select(c => c.TableName)),
+                                    columns = sqlSelectToken.Columns,
+                                    tables = string.Join(", ", sqlSelectToken.Tables.Select(c => c.TableName)),
                                     changeData = tableData.ChangeData,
                                     referencedTableData = tableData.ReferencedTableData
                                 },
-                                columnsSave = sqlSelectToken.ColumnSaveList,
+                                columnsSave = sqlSelectToken.ColumnSaveItems,
                                 result = result
                             };
                         }
@@ -213,9 +213,9 @@ namespace Stef.DatabaseQuery.Controllers
                     tableId = tableId,
                     databaseId = databaseId,
                     script = script,
-                    tables = string.Join(", ", sqlSelectToken.TableList.Select(c => c.TableName))
+                    tables = string.Join(", ", sqlSelectToken.Tables.Select(c => c.TableName))
                 },
-                columns = sqlSelectToken.ColumnList
+                columns = sqlSelectToken.Columns
             };
         }
         [HttpPost]

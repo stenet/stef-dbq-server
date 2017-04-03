@@ -17,11 +17,11 @@ namespace Stef.DatabaseQuery.Business.Managers.Sqls
         public SqlSelectToken(DatabaseInfo databaseInfo, string script, int start, int end)
             : base(databaseInfo, ScriptType.Query, script, start, end)
         {
-            TableList = new List<SqlTableToken>();
-            ColumnList = new List<SqlColumnToken>();
+            Tables = new List<SqlTableToken>();
+            Columns = new List<SqlColumnToken>();
 
-            ColumnKeyList = new List<SqlColumnToken>();
-            ColumnSaveList = new List<SqlColumnToken>();
+            ColumnKeys = new List<SqlColumnToken>();
+            ColumnSaveItems = new List<SqlColumnToken>();
 
             ExtractSegments();
         }
@@ -33,12 +33,12 @@ namespace Stef.DatabaseQuery.Business.Managers.Sqls
         public string Having { get; private set; }
         public string Where { get; private set; }
 
-        public List<SqlTableToken> TableList { get; private set; }
-        public List<SqlColumnToken> ColumnList { get; private set; }
+        public List<SqlTableToken> Tables { get; private set; }
+        public List<SqlColumnToken> Columns { get; private set; }
 
         public SqlTableToken TableSave { get; internal set; }
-        public List<SqlColumnToken> ColumnKeyList { get; private set; }
-        public List<SqlColumnToken> ColumnSaveList { get; private set; }
+        public List<SqlColumnToken> ColumnKeys { get; private set; }
+        public List<SqlColumnToken> ColumnSaveItems { get; private set; }
 
         public bool CanSave()
         {
@@ -50,7 +50,7 @@ namespace Stef.DatabaseQuery.Business.Managers.Sqls
         }
         public bool CanEdit(string fieldName, RowState rowState)
         {
-            var canEdit = ColumnSaveList
+            var canEdit = ColumnSaveItems
                 .Any(c => c.InternalFieldName == fieldName);
 
             if (canEdit)
@@ -58,7 +58,7 @@ namespace Stef.DatabaseQuery.Business.Managers.Sqls
 
             if (rowState == RowState.New)
             {
-                canEdit = ColumnKeyList
+                canEdit = ColumnKeys
                     .Any(c => c.InternalFieldName == fieldName);
 
                 if (canEdit)
@@ -66,6 +66,51 @@ namespace Stef.DatabaseQuery.Business.Managers.Sqls
             }
 
             return false;
+        }
+        
+        public Column GetColumnInfo(string alias, string columnName)
+        {
+            if (columnName.StartsWith("\"") && columnName.EndsWith("\""))
+                columnName = columnName.Substring(1, columnName.Length - 2);
+
+            if (string.IsNullOrEmpty(alias))
+            {
+                var tableName = Tables.FirstOrDefault()?.TableName;
+                if (string.IsNullOrEmpty(tableName))
+                    return null;
+
+                var column = DatabaseInfo.SchemaInfo.GetColumn(tableName, columnName);
+
+                return column;
+            }
+            else
+            {
+                alias = alias.ToLower();
+
+                var tableName = Tables
+                    .FirstOrDefault(c => c.Alias.ToLower() == alias)?
+                    .TableName;
+
+                if (string.IsNullOrEmpty(tableName))
+                {
+                    tableName = Tables
+                        .FirstOrDefault(c => c.TableName.ToLower() == alias)?
+                        .TableName;
+                }
+
+                if (string.IsNullOrEmpty(tableName))
+                {
+                    return null;
+                }
+
+                var column = DatabaseInfo.SchemaInfo.GetColumn(tableName, columnName);
+
+                return column;
+            }
+        }
+        public void RefreshCanUpdate()
+        {
+            ExtractCanUpdate();
         }
 
         private void ExtractSegments()
@@ -149,7 +194,7 @@ namespace Stef.DatabaseQuery.Business.Managers.Sqls
                 }
             }
 
-            TableList = tableList;
+            Tables = tableList;
         }
         private void ExtractColumns()
         {
@@ -252,14 +297,14 @@ namespace Stef.DatabaseQuery.Business.Managers.Sqls
                 }
             }
 
-            ColumnList = columnList;
+            Columns = columnList;
         }
         private void ExtractCanUpdate()
         {
             if (DatabaseInfo == null)
                 return;
 
-            var tableSave = TableList.FirstOrDefault();
+            var tableSave = Tables.FirstOrDefault();
 
             if (tableSave == null)
                 return;
@@ -267,7 +312,7 @@ namespace Stef.DatabaseQuery.Business.Managers.Sqls
             if (!tableSave.IsValid)
                 return;
 
-            var columnSaveList = ColumnList
+            var columnSaveList = Columns
                 .Where(c =>
                     c.Alias == tableSave.Alias
                     || c.Alias == tableSave.TableName)
@@ -317,48 +362,8 @@ namespace Stef.DatabaseQuery.Business.Managers.Sqls
 
             TableSave = tableSave;
 
-            ColumnKeyList = columnPKList.ToList();
-            ColumnSaveList = columnSaveList.ToList();
-        }
-        private Column GetColumnInfo(string alias, string columnName)
-        {
-            if (columnName.StartsWith("\"") && columnName.EndsWith("\""))
-                columnName = columnName.Substring(1, columnName.Length - 2);
-
-            if (string.IsNullOrEmpty(alias))
-            {
-                var tableName = TableList.FirstOrDefault()?.TableName;
-                if (string.IsNullOrEmpty(tableName))
-                    return null;
-
-                var column = DatabaseInfo.SchemaInfo.GetColumn(tableName, columnName);
-
-                return column;
-            }
-            else
-            {
-                alias = alias.ToLower();
-
-                var tableName = TableList
-                    .FirstOrDefault(c => c.Alias.ToLower() == alias)?
-                    .TableName;
-
-                if (string.IsNullOrEmpty(tableName))
-                {
-                    tableName = TableList
-                        .FirstOrDefault(c => c.TableName.ToLower() == alias)?
-                        .TableName;
-                }
-
-                if (string.IsNullOrEmpty(tableName))
-                {
-                    return null;
-                }
-
-                var column = DatabaseInfo.SchemaInfo.GetColumn(tableName, columnName);
-
-                return column;               
-            }
+            ColumnKeys = columnPKList.ToList();
+            ColumnSaveItems = columnSaveList.ToList();
         }
     }
 }
