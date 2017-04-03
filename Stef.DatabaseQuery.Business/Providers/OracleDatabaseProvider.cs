@@ -3,43 +3,46 @@ using Stef.DatabaseQuery.Business.Managers.Databases;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Stef.DatabaseQuery.Business.Providers
 {
-    public class SqlDatabaseProvider : IDatabaseProvider
+    public class OracleDatabaseProvider : IDatabaseProvider
     {
         private Dictionary<string, object> _ReservedWordsDic;
+        private Regex _RegexLowerCase;
 
-        public SqlDatabaseProvider()
+        public OracleDatabaseProvider()
         {
             _ReservedWordsDic = Properties
                 .Resources
-                .SqlReservedWords
+                .OracleReservedWords
                 .Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None)
                 .ToDictionary(c => c.ToLower(), c => (object)null);
+
+            _RegexLowerCase = new Regex("[a-z]");
         }
 
         public string Name
         {
             get
             {
-                return "SQL-Server";
+                return "Oracle";
             }
         }
         public string ParameterPrefix
         {
             get
             {
-                return "@";
+                return ":";
             }
         }
 
         public IDbConnection CreateConnection(string connectionString)
         {
-            var connection = new SqlConnection(connectionString);
+            var connection = new System.Data.OracleClient.OracleConnection(connectionString);
             connection.Open();
 
             return connection;
@@ -61,8 +64,13 @@ namespace Stef.DatabaseQuery.Business.Providers
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
-                    @"select concat(table_schema, '.', table_name), table_type
-                        from information_schema.tables";
+                    @"select table_name, 'TABLE'
+                        from user_tables
+
+                        union
+
+                    select view_name, 'VIEW'
+                        from user_views";
 
                 using (var reader = command.ExecuteReader())
                 {
@@ -86,8 +94,8 @@ namespace Stef.DatabaseQuery.Business.Providers
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
-                    @"select concat(table_schema, '.', table_name), column_name, data_type, character_maximum_length, is_nullable
-                        from information_schema.columns
+                    @"select table_name, column_name, data_type, nvl(data_precision, data_length), nullable
+                        from user_tab_columns
                         order by 1, 2";
 
                 using (var reader = command.ExecuteReader())
@@ -103,7 +111,7 @@ namespace Stef.DatabaseQuery.Business.Providers
                                 GetTypeFromSqlColumnType(reader.GetString(2)),
                                 reader.GetString(2),
                                 reader.IsDBNull(3) ? 0 : reader.GetInt32(3),
-                                reader.GetString(4) == "YES"));
+                                reader.GetString(4) == "Y"));
                     }
 
                     return columns;
@@ -115,11 +123,12 @@ namespace Stef.DatabaseQuery.Business.Providers
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
-                    @"SELECT concat(object_schema_name(fk.referenced_object_id), '.', object_name(fk.referenced_object_id)), c2.name, concat(object_schema_name(fk.parent_object_id), '.', object_name(fk.parent_object_id)), c1.name
-                        FROM sys.foreign_keys fk
-                        inner join sys.foreign_key_columns fkc on fkc.constraint_object_id = fk.object_id
-                        inner join sys.columns c1 on fkc.parent_column_id = c1.column_id AND fkc.parent_object_id = c1.object_id
-                        inner join sys.columns c2 ON fkc.referenced_column_id = c2.column_id AND fkc.referenced_object_id = c2.object_id";
+                    @"SELECT c_pk.table_name, b.column_name, a.table_name, a.column_name
+                        FROM user_cons_columns a
+                        join user_constraints c on a.owner = c.owner and a.constraint_name = c.constraint_name
+                        join user_constraints c_pk on c.r_owner = c_pk.owner and c.r_constraint_name = c_pk.constraint_name
+                        join user_cons_columns b on C_PK.owner = b.owner and C_PK.CONSTRAINT_NAME = b.constraint_name and b.POSITION = a.POSITION     
+                        where c.constraint_type = 'R'";
 
                 using (var reader = command.ExecuteReader())
                 {
@@ -144,12 +153,19 @@ namespace Stef.DatabaseQuery.Business.Providers
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
-                    @"select ind.name, concat(object_schema_name(ind.object_id), '.', object_name(ind.object_id)), col.name, ind.is_primary_key, ind.is_unique
-                        from sys.indexes ind
-                        inner join sys.index_columns ic on ind.object_id = ic.object_id and ind.index_id = ic.index_id
-                        inner join sys.columns col on ic.object_id = col.object_id and ic.column_id = col.column_id
-                        inner join sys.tables t on ind.object_id = t.object_id
-                        where t.is_ms_shipped = 0 and (ind.is_primary_key = 1 or ind.is_unique = 1)";
+                    @"SELECT concat('P_', cons.constraint_name), cols.table_name, cols.column_name, 1, 1
+                        FROM user_constraints cons, user_cons_columns cols
+                        WHERE cons.constraint_type = 'P'
+                        AND cons.constraint_name = cols.constraint_name
+                        AND cons.owner = cols.owner
+
+                        union
+
+                        select 
+                        concat('I_', a.index_name), a.table_name, a.column_name, 0, 1
+                        from user_ind_columns a, user_indexes b
+                        where a.index_name = b.index_name 
+                        and b.uniqueness = 'UNIQUE'";
 
                 using (var reader = command.ExecuteReader())
                 {
@@ -162,8 +178,8 @@ namespace Stef.DatabaseQuery.Business.Providers
                                 reader.GetString(0),
                                 reader.GetString(1),
                                 reader.GetString(2),
-                                reader.GetBoolean(3),
-                                reader.GetBoolean(4)));
+                                reader.GetInt32(3) == 1,
+                                reader.GetInt32(4) == 1));
                     }
 
                     var result = new Dictionary<string, string>();
@@ -198,16 +214,14 @@ namespace Stef.DatabaseQuery.Business.Providers
 
         public void CreateTableIfNotExists(IDbConnection connection, Table table, List<Column> columns)
         {
-            var tableName = string.Concat("dbo.", table.TableName);
-
             var tables = GetTables(connection);
-            var exists = tables.Any(c => c.TableName == tableName);
+            var exists = tables.Any(c => c.TableName == table.TableName);
 
             if (!exists)
             {
                 var sb = new StringBuilder();
                 sb.Append("create table ");
-                sb.Append(tableName);
+                sb.Append(table.TableName);
                 sb.Append(" (");
 
                 sb.Append(string.Join(", ", columns.Select(c => GetCreateColumn(c))));
@@ -235,6 +249,10 @@ namespace Stef.DatabaseQuery.Business.Providers
                 else
                     return date.ToString("dd.MM.yyyy");
             }
+            else if (type == typeof(Guid))
+            {
+                return Guid.Parse(value.ToString());
+            }
 
             return value;
         }
@@ -245,6 +263,8 @@ namespace Stef.DatabaseQuery.Business.Providers
 
             if (type == typeof(DateTime))
                 return DateTime.Parse(value.ToString());
+            else if (value is Guid)
+                return ((Guid)value).ToString();
 
             return value;
         }
@@ -259,6 +279,10 @@ namespace Stef.DatabaseQuery.Business.Providers
             {
                 return string.Concat("\"", columnName, "\"");
             }
+            else if (_RegexLowerCase.IsMatch(columnName))
+            {
+                return string.Concat("\"", columnName, "\"");
+            }
             else
             {
                 return columnName.ToLower();
@@ -268,56 +292,50 @@ namespace Stef.DatabaseQuery.Business.Providers
         {
             switch (type)
             {
-                case "bit":
-                    return typeof(bool);
-                case "date":
-                case "datetime":
+                case "DATE":
+                case "TIMESTAMP":
+                case "TIMESTAMP WITH TIME ZONE":
+                case "TIMESTAMP WITH LOCAL TIME ZONE":
                     return typeof(DateTime);
-                case "time":
-                    return typeof(TimeSpan);
-                case "decimal":
-                case "money":
-                case "smallmoney":
-                case "numeric":
+                case "NUMBER":
+                case "FLOAT":
                     return typeof(decimal);
-                case "int":
-                    return typeof(int);
-                case "smallint":
-                case "tinyint":
-                    return typeof(short);
-                case "bigint":
-                    return typeof(long);
-                case "nchar":
-                case "nvarchar":
-                case "varchar":
-                case "xml":
+                case "CHAR":
+                case "VARCHAR":
+                case "VARCHAR2":
+                case "NCHAR":
+                case "NVARCHAR2":
+                case "LONG":
+                case "CLOB":
+                case "NCLOB":
                     return typeof(string);
-                case "uniqueidentifier":
-                    return typeof(Guid);
-                case "varbinary":
+                case "BLOB":
                     return typeof(byte[]);
                 default:
                     return typeof(string);
             }
         }
-        private string GetSqlColumnTypeFromType(Type type)
+        private string GetSqlColumnTypeFromType(Type type, int maxLength)
         {
             if (type == typeof(bool))
-                return "bit";
+                return "NUMBER(1,0)";
             else if (type == typeof(DateTime))
-                return "datetime";
+                return "DATE";
             else if (type == typeof(decimal) || type == typeof(double))
-                return "money";
+                return "NUMBER(19,5)";
             else if (type == typeof(int))
-                return "int";
+                return "NUMBER";
             else if (type == typeof(long))
-                return "bigint";
+                return "NUMBER";
             else if (type == typeof(short))
-                return "tinyint";
+                return "NUMBER";
             else if (type == typeof(string))
-                return "nvarchar";
+                if (maxLength <= 0)
+                    return "NCLOB";
+                else
+                    return $"NVARCHAR2({maxLength})";
             else if (type == typeof(Guid))
-                return "uniqueidentifier";
+                return "NVARCHAR2(50)";
             else
                 throw new NotImplementedException(type.FullName);
         }
@@ -328,21 +346,8 @@ namespace Stef.DatabaseQuery.Business.Providers
             sb.Append(column.ColumnName);
             sb.Append("\"");
             sb.Append(" ");
-            sb.Append(GetSqlColumnTypeFromType(column.Type));
+            sb.Append(GetSqlColumnTypeFromType(column.Type, column.MaxLength));
 
-            if (column.Type == typeof(string))
-            {
-                if (column.MaxLength <= 0)
-                {
-                    sb.Append("(max)");
-                }
-                else
-                {
-                    sb.Append("(");
-                    sb.Append(column.MaxLength);
-                    sb.Append(")");
-                }
-            }
 
             if (!column.IsNullable)
                 sb.Append(" NOT NULL");

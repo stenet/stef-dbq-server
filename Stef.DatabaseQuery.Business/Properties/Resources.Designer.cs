@@ -61,6 +61,75 @@ namespace Stef.DatabaseQuery.Business.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to ACCESS
+        ///ACCOUNT
+        ///ACTIVATE
+        ///ADD
+        ///ADMIN
+        ///ADVISE
+        ///AFTER
+        ///ALL
+        ///ALL_ROWS
+        ///ALLOCATE
+        ///ALTER
+        ///ANALYZE
+        ///AND
+        ///ANY
+        ///ARCHIVE
+        ///ARCHIVELOG
+        ///ARRAY
+        ///AS
+        ///ASC
+        ///AT
+        ///AUDIT
+        ///AUTHENTICATED
+        ///AUTHORIZATION
+        ///AUTOEXTEND
+        ///AUTOMATIC
+        ///BACKUP
+        ///BECOME
+        ///BEFORE
+        ///BEGIN
+        ///BETWEEN
+        ///BFILE
+        ///BITMAP
+        ///BLOB
+        ///BLOCK
+        ///BODY
+        ///BY
+        ///CACHE
+        ///CACHE_INSTANCES
+        ///CANCEL
+        ///CASCADE
+        ///CAST
+        ///CFILE
+        ///CHAINED
+        ///CHANGE
+        ///CHAR
+        ///CHAR_CS
+        ///CHARACTER
+        ///CHECK
+        ///CHECKPOINT
+        ///CHOOSE
+        ///CHUNK
+        ///CLEAR
+        ///CLOB
+        ///CLONE
+        ///CLOSE
+        ///CLOSE_CACHED_OPEN_CURSORS
+        ///CLUSTER
+        ///COALESCE
+        ///COLUMN
+        ///COLUMNS
+        ///COMMENT [rest of string was truncated]&quot;;.
+        /// </summary>
+        internal static string OracleReservedWords {
+            get {
+                return ResourceManager.GetString("OracleReservedWords", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to ADD
         ///EXTERNAL
         ///PROCEDURE

@@ -19,7 +19,6 @@ namespace Stef.DatabaseQuery.Business.Managers
         {
             var catalog = new AssemblyCatalog(Assembly.GetExecutingAssembly());
             _CompositionContainer = new CompositionContainer(catalog);
-            _CompositionContainer.Compose(new CompositionBatch());
         }
 
         public static CompositionManager Instance

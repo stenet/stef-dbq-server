@@ -92,10 +92,12 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <Compile Include="Providers\OracleDatabaseProvider.cs" />
     <Compile Include="Providers\SqlDatabaseProvider.cs" />
     <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Providers\OracleReservedWords.txt" />
     <Content Include="Providers\SqlReservedWords.txt" />
   </ItemGroup>
   <ItemGroup>

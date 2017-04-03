@@ -14,6 +14,9 @@ namespace Stef.DatabaseQuery.Business.Managers.Databases
             TypeName = typeName;
             MaxLength = maxLength;
             IsNullable = isNullable;
+
+            if (type != typeof(string))
+                MaxLength = 0;
         }
 
         [JsonProperty("tableName")]
