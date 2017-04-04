@@ -42,7 +42,7 @@ namespace Stef.DatabaseQuery.Business.Providers
 
         public IDbConnection CreateConnection(string connectionString)
         {
-            var connection = new System.Data.OracleClient.OracleConnection(connectionString);
+            var connection = new Oracle.DataAccess.Client.OracleConnection(connectionString);
             connection.Open();
 
             return connection;
@@ -110,7 +110,7 @@ namespace Stef.DatabaseQuery.Business.Providers
                                 reader.GetString(1),
                                 GetTypeFromSqlColumnType(reader.GetString(2)),
                                 reader.GetString(2),
-                                reader.IsDBNull(3) ? 0 : reader.GetInt32(3),
+                                reader.IsDBNull(3) ? 0 : Convert.ToInt32(reader.GetValue(3)),
                                 reader.GetString(4) == "Y"));
                     }
 
@@ -123,12 +123,14 @@ namespace Stef.DatabaseQuery.Business.Providers
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
-                    @"SELECT c_pk.table_name, b.column_name, a.table_name, a.column_name
-                        FROM user_cons_columns a
-                        join user_constraints c on a.owner = c.owner and a.constraint_name = c.constraint_name
-                        join user_constraints c_pk on c.r_owner = c_pk.owner and c.r_constraint_name = c_pk.constraint_name
-                        join user_cons_columns b on C_PK.owner = b.owner and C_PK.CONSTRAINT_NAME = b.constraint_name and b.POSITION = a.POSITION     
-                        where c.constraint_type = 'R'";
+                    @"select c.table_name, c.column_name, b.table_name, b.column_name
+                        from user_cons_columns b, user_cons_columns c, user_constraints a
+                        where b.constraint_name = a.constraint_name
+                        and a.owner = b.owner
+                        and b.position = c.position
+                        and c.constraint_name = a.r_constraint_name
+                        and c.owner = a.r_owner
+                        and a.constraint_type = 'R'";
 
                 using (var reader = command.ExecuteReader())
                 {
@@ -178,8 +180,8 @@ namespace Stef.DatabaseQuery.Business.Providers
                                 reader.GetString(0),
                                 reader.GetString(1),
                                 reader.GetString(2),
-                                reader.GetInt32(3) == 1,
-                                reader.GetInt32(4) == 1));
+                                Convert.ToInt32(reader.GetValue(3)) == 1,
+                                Convert.ToInt32(reader.GetValue(4)) == 1));
                     }
 
                     var result = new Dictionary<string, string>();
